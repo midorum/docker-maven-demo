@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+
+FROM eclipse-temurin:17-jdk-jammy as base
+WORKDIR /app
+COPY .mvn/ .mvn
+COPY mvnw pom.xml ./
+RUN ./mvnw verify --fail-never
+COPY src ./src
+
+FROM base as development
+# copying maven cache from previous stage to prevent redownload dependencies
+COPY --from=base /root/.m2/ /root/.m2
+#CMD ["./mvnw", "spring-boot:run", "-Dspring-boot.run.profiles=dev", "-Dspring-boot.run.jvmArguments='-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8000'"]
+ENTRYPOINT ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev -Dspring-boot.run.jvmArguments='-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8000'
+
+FROM base as build
+RUN ./mvnw package
+
+FROM eclipse-temurin:17-jdk-jammy as production
+COPY --from=build /app/target/demo-*.jar /app/demo-app.jar
+ENTRYPOINT java -Dspring.profiles.active=prod -jar /app/demo-app.jar
+
+# development build
+# docker build -f Dockerfile_multi_stage --target development  --tag demo-app .
+
+# production build
+# docker build -f Dockerfile_multi_stage --tag demo-app .
+
+# run built container (detached)
+# docker run --rm -d -p 8080:8080 --name demo-server demo-app
+
+# stop running container
+# docker stop demo-server
